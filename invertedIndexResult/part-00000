@@ -1,0 +1,5 @@
+(a,(2.txt,1))
+(banana,(2.txt,1))
+(is,(0.txt,2),(2.txt,1),(1.txt,1))
+(it,(0.txt,2),(1.txt,1),(2.txt,1))
+(what,(0.txt,1),(1.txt,1))
