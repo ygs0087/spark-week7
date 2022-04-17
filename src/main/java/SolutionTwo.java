@@ -31,14 +31,16 @@ public class SolutionTwo {
     public static void main(String [] args) throws IOException {
         String sourceRootPathStr = args[0];
         String targetRootPathStr = args[1];
+        Path sourceRootPath = new Path(sourceRootPathStr);
+        Path targetRootPath = new Path(targetRootPathStr);
 
-        JavaRDD<String> sourceFileListRDD = getSourceFileLists(sourceRootPathStr, targetRootPathStr);
+        JavaRDD<String> sourceFileListRDD = getSourceFileLists(sourceRootPath, targetRootPath);
         sourceFileListRDD.foreachPartition(sourceFileIterator -> {
-            FileSystem sourceFileSystem = new Path(sourceRootPathStr).getFileSystem(configuration);
-            FileSystem targetFileSystem = new Path(targetRootPathStr).getFileSystem(configuration);
+            FileSystem sourceFileSystem = sourceRootPath.getFileSystem(configuration);
+            FileSystem targetFileSystem = targetRootPath.getFileSystem(configuration);
             while(sourceFileIterator.hasNext()) {
                 String sourceFilePath = sourceFileIterator.next();
-                Path sourceFileRelativePath = new Path(new Path(sourceRootPathStr).toUri().relativize(new Path(sourceFilePath).toUri()));
+                Path sourceFileRelativePath = new Path(sourceRootPath.toUri().relativize(new Path(sourceFilePath).toUri()));
                 Path targetPath = new Path(targetRootPathStr, sourceFileRelativePath);
                 InputStream sourceInputStream = sourceFileSystem.open(new Path(sourceFilePath));
                 FSDataOutputStream fsDataOutputStream = targetFileSystem.create(targetPath, true);
@@ -47,9 +49,7 @@ public class SolutionTwo {
         });
     }
 
-    private static JavaRDD<String> getSourceFileLists(String sourceRootPathStr, String targetRootPathStr) throws IOException {
-        Path sourceRootPath = new Path(sourceRootPathStr);
-        Path targetRootPath = new Path(targetRootPathStr);
+    private static JavaRDD<String> getSourceFileLists(Path sourceRootPath, Path targetRootPath) throws IOException {
         FileSystem sourceFileSystem = sourceRootPath.getFileSystem(configuration);
         FileSystem targetFileSystem = targetRootPath.getFileSystem(configuration);
         RemoteIterator<LocatedFileStatus> iterator = sourceFileSystem.listFiles(sourceRootPath, true);
@@ -61,7 +61,9 @@ public class SolutionTwo {
             distinctDirPaths.add(filePath.getParent());
             fileList.add(filePath.toString());
         }
+        // 去除源文件根路径
         distinctDirPaths.remove(sourceRootPath);
+        // 将source文件的文件夹 在target目录下先创建好
         for(Path distinctDirPath : distinctDirPaths) {
             String sourceChildrenDirRelativePathStr = sourceRootPath.toUri().relativize(distinctDirPath.toUri()).toString();
             targetFileSystem.mkdirs(new Path(targetRootPath, sourceChildrenDirRelativePathStr), new FsPermission(FsAction.ALL, FsAction.READ, FsAction.READ));
