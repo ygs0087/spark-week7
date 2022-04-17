@@ -31,10 +31,14 @@ public class SolutionTwo {
     public static void main(String [] args) throws IOException {
         String sourceRootPathStr = args[0];
         String targetRootPathStr = args[1];
+        String maxConcurrencyStr = args[2];
+        String ignoreFailureStr = args[3];
         Path sourceRootPath = new Path(sourceRootPathStr);
         Path targetRootPath = new Path(targetRootPathStr);
+        Integer maxConcurrency = Integer.parseInt(maxConcurrencyStr);
+        Boolean isIgnoreFailure = Boolean.parseBoolean(ignoreFailureStr);
 
-        JavaRDD<String> sourceFileListRDD = getSourceFileLists(sourceRootPath, targetRootPath);
+        JavaRDD<String> sourceFileListRDD = getSourceFileLists(sourceRootPath, targetRootPath, maxConcurrency);
         sourceFileListRDD.foreachPartition(sourceFileIterator -> {
             FileSystem sourceFileSystem = sourceRootPath.getFileSystem(configuration);
             FileSystem targetFileSystem = targetRootPath.getFileSystem(configuration);
@@ -42,16 +46,22 @@ public class SolutionTwo {
                 String sourceFilePath = sourceFileIterator.next();
                 Path sourceFileRelativePath = new Path(sourceRootPath.toUri().relativize(new Path(sourceFilePath).toUri()));
                 Path targetPath = new Path(targetRootPathStr, sourceFileRelativePath);
-                InputStream sourceInputStream = sourceFileSystem.open(new Path(sourceFilePath));
-                FSDataOutputStream fsDataOutputStream = targetFileSystem.create(targetPath, true);
-                IOUtils.copy(sourceInputStream, fsDataOutputStream);
+                try {
+                    InputStream sourceInputStream = sourceFileSystem.open(new Path(sourceFilePath));
+                    FSDataOutputStream fsDataOutputStream = targetFileSystem.create(targetPath, true);
+                    IOUtils.copy(sourceInputStream, fsDataOutputStream);
+                } catch (Exception e) {
+                    if (!isIgnoreFailure) throw e;
+                }
+
             }
         });
     }
 
-    private static JavaRDD<String> getSourceFileLists(Path sourceRootPath, Path targetRootPath) throws IOException {
+    private static JavaRDD<String> getSourceFileLists(Path sourceRootPath, Path targetRootPath, Integer maxConcurrency) throws IOException {
         FileSystem sourceFileSystem = sourceRootPath.getFileSystem(configuration);
         FileSystem targetFileSystem = targetRootPath.getFileSystem(configuration);
+        // 获得source所有文件, 包括多级子目录下的文件
         RemoteIterator<LocatedFileStatus> iterator = sourceFileSystem.listFiles(sourceRootPath, true);
         Set<Path> distinctDirPaths = new HashSet<>();
         List<String> fileList = new ArrayList<>();
@@ -68,7 +78,7 @@ public class SolutionTwo {
             String sourceChildrenDirRelativePathStr = sourceRootPath.toUri().relativize(distinctDirPath.toUri()).toString();
             targetFileSystem.mkdirs(new Path(targetRootPath, sourceChildrenDirRelativePathStr), new FsPermission(FsAction.ALL, FsAction.READ, FsAction.READ));
         }
-        return javaSparkContext.parallelize(fileList, 4);
+        return javaSparkContext.parallelize(fileList, maxConcurrency);
     }
 
 }
